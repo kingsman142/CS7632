@@ -38,7 +38,6 @@ class AStarNavigator2(PathNetworkNavigator):
 	### source: the place the agent is starting from (i.e., its lowest_cost_node_location location)
 	### dest: the place the agent is told to go to
 	def computePath(self, source, dest):
-		print("***** we want to go from {} to {}".format(source, dest))
 		self.setPath(None)
 		### Make sure the next and dist matrices exist
 		if self.agent != None and self.world != None:
@@ -47,7 +46,6 @@ class AStarNavigator2(PathNetworkNavigator):
 			### Step 1: If the agent has a clear path from the source to dest, then go straight there.
 			### Determine if there are no obstacles between source and destination (hint: cast rays against world.getLines(), check for clearance).
 			### Tell the agent to move to dest
-			#print(source, dest, clearShot(source, dest, self.world.getLinesWithoutBorders(), self.world.getPoints(), self.agent))
 			if clearShot(source, dest, self.world.getLinesWithoutBorders(), self.world.getPoints(), self.agent):
 				self.agent.moveToTarget(dest)
 			else:
@@ -55,14 +53,12 @@ class AStarNavigator2(PathNetworkNavigator):
 				### Find the path nodes closest to source and destination.
 				start = getOnPathNetwork(source, self.pathnodes, self.world.getLinesWithoutBorders(), self.agent)
 				end = getOnPathNetwork(dest, self.pathnodes, self.world.getLinesWithoutBorders(), self.agent)
-				#print("start {}, end {}".format(start, end))
 				if start != None and end != None:
 					### Remove edges from the path network that intersect gates
 					newnetwork = unobstructedNetwork(self.pathnetwork, self.world.getGates(), self.world)
 					closedlist = []
 					### Create the path by traversing the pathnode network until the path node closest to the destination is reached
 					path, closedlist = astar(start, end, newnetwork)
-					#print("path: {}".format(path))
 					if path is not None and len(path) > 0:
 						### Determine whether shortcuts are available
 						path = shortcutPath(source, dest, path, self.world, self.agent)
@@ -109,12 +105,19 @@ def clearShot(p1, p2, worldLines, worldPoints, agent):
 	### YOUR CODE GOES BELOW HERE ###
 	min_allowed_distance = agent.getMaxRadius()
 
-	# for each possible line between path nodes, make sure that line doesn't intersect an obstacle and it's far enough away from any obstacle
+	# for each possible line to a path node, make sure that line doesn't intersect an obstacle and it's far enough away from any obstacle
 	intersection = False # does the line between p1 and p2 intersect any obstacles or come within min_allowed_distance?
 	for obstacle_corner in worldPoints: # check for corner detection
 		if minimumDistance((p1, p2), obstacle_corner) <= min_allowed_distance:
 			intersection = True
-	if not intersection and not rayTraceWorld(p1, p2, worldLines): # check for intersection detection
+	# for each path node the agent can travel to, check to see if it intersects with any world lines (i.e. obstacles and gates)
+	collisionBetweenPathNodeAndWorldLines = False
+	for line in worldLines:
+		if minimumDistance(line, p2) <= min_allowed_distance:
+			collisionBetweenPathNodeAndWorldLines = True
+
+	# finally, make sure all the checks from above pass
+	if not intersection and not rayTraceWorld(p1, p2, worldLines) and not collisionBetweenPathNodeAndWorldLines: # check for intersection detection
 		return True
 	### YOUR CODE GOES ABOVE HERE ###
 	return False
@@ -129,23 +132,23 @@ def getOnPathNetwork(location, pathnodes, worldLines, agent):
 	### YOUR CODE GOES BELOW HERE ###
 	min_distance = None
 	min_pathnode_location = None
-	print(location, pathnodes)
+
+	# grab the world points to plug into clearShot()
 	worldPoints = set()
 	for line in worldLines:
 		worldPoints.add(line[0])
 		worldPoints.add(line[1])
 	worldPoints = list(worldPoints)
-	#print("==========\nget on path with location {}".format(location))
+
+	# for each path node, find the node that's closest to the agent that we can actually travel to
 	for pathnode in pathnodes:
-		distance_between_locations = distance(location, pathnode)
-		if min_distance is None or distance_between_locations < min_distance:
-			#print("setting new location from location {} and dist {}".format(min_pathnode_location, min_distance))
+		distance_between_locations = distance(location, pathnode) # distance between agent and path node
+		if min_distance is None or distance_between_locations < min_distance: # set the min distance if it doesn't exist already
 			if clearShot(location, pathnode, worldLines, [], agent):
-				#print("...to location {} with dist {}".format(pathnode, distance_between_locations))
 				min_distance = distance_between_locations
 				min_pathnode_location = pathnode
+
 	node = min_pathnode_location
-	print("--------- to get on the network go from {} to {}".format(location, node))
 	### YOUR CODE GOES ABOVE HERE ###
 	return node
 
@@ -164,31 +167,30 @@ def astar(init, goal, network):
 	open = []
 	closed = []
 	### YOUR CODE GOES BELOW HERE ###
-	'''parents = {}
+	parents = {}
 	distances = {init: 0}
 	heuristics = {init: distances[init] + distance(init, goal)}
-	open = [init] #[(init, heuristics[init])]
+	open.append(init)
 
 	while len(open) > 0:
 		# find node with lowest heuristic cost
-		#lowest_cost = min(open, key = lambda x : x[1])
-		#lowest_cost_index = open.index(lowest_cost)
-		#lowest_cost_node_location, _ = open[lowest_cost_index]
-		open = sort_open(open, heuristics)
-		lowest_cost_node_location = open[0]
+		new_arr = [(item, heuristics[item]) for item in open]
+		lowest_cost = min(new_arr, key = lambda x : x[1])
+		lowest_cost_index = new_arr.index(lowest_cost)
+		lowest_cost_node_location = new_arr[lowest_cost_index][0]
 
 		if lowest_cost_node_location == goal: # we are finished, so traverse back from the destination node to each node's lowest cost parent
 			path.append(lowest_cost_node_location)
 			while lowest_cost_node_location in parents:
 				lowest_cost_node_location = parents[lowest_cost_node_location]
 				if lowest_cost_node_location == init:
-					continue
+					break
 				else:
 					path.insert(0, lowest_cost_node_location)
-			path.insert(0, init) # lowest_cost_node_location should be equal to init
+			path.insert(0, lowest_cost_node_location) # lowest_cost_node_location should be equal to init
 			break
 		else: # keep navigating along the lowest cost path
-			open = open[1:]#open[0:lowest_cost_index] + open[(lowest_cost_index+1):]
+			open = open[0:lowest_cost_index] + open[(lowest_cost_index+1):]
 			closed.append(lowest_cost_node_location)
 
 			# find all neighbors of this node so we can iterate further
@@ -200,56 +202,9 @@ def astar(init, goal, network):
 			neighbors.remove(lowest_cost_node_location)
 
 			for neighbor in neighbors: # add all of this node's neighbors so we can continue with A*
-				if not neighbor in closed: # make sure we haven't already visited this node
-					neighbor_heuristic = distances[lowest_cost_node_location] + distance(lowest_cost_node_location, goal)
-					if not neighbor in open or neighbor_heuristic < distances[neighbor]: # did we find a better path to this node/neighbor than exists already?
-						if neighbor not in open:
-							open.append(neighbor)#(neighbor, neighbor_heuristic))
-						distances[neighbor] = neighbor_heuristic
-						heuristics[neighbor] = distances[neighbor] + distance(neighbor, goal) # compute the neighbor's cost
-						parents[neighbor] = lowest_cost_node_location # replace this node's shortest path parent'''
-
-	parents = {}
-	distances = {init: 0}
-	heuristics = {init: distances[init] + distance(init, goal)}
-	open = [init]
-
-	while len(open) > 0:
-		# find node with lowest heuristic cost
-		#lowest_cost = min(open, key = lambda x : x[1])
-		#lowest_cost_index = open.index(lowest_cost)
-		#lowest_cost_node_location, _ = open[lowest_cost_index]
-		lowest_cost = min([(item, heuristics[item]) for item in open], key = lambda x : x[1])
-		lowest_cost_index = open.index(lowest_cost[0])
-		lowest_cost_node_location = open[lowest_cost_index]
-		#open = sort_open(open, heuristics)
-		#lowest_cost_node_location = open[0]
-
-		if lowest_cost_node_location == goal:
-			path.append(lowest_cost_node_location)
-			while lowest_cost_node_location in parents:
-				lowest_cost_node_location = parents[lowest_cost_node_location]
-				if lowest_cost_node_location == init:
-					continue
-				else:
-					path.insert(0, lowest_cost_node_location)
-			path.insert(0, lowest_cost_node_location)
-			break
-		else:
-			open = open[1:]
-			closed.append(lowest_cost_node_location)
-
-			neighbors = set()
-			for line in network:
-				if lowest_cost_node_location in line:
-					neighbors.add(line[0])
-					neighbors.add(line[1])
-			neighbors.remove(lowest_cost_node_location)
-
-			for neighbor in neighbors:
-				if not neighbor in closed:
+				if neighbor not in closed: # make sure we haven't already visited this node
 					neighbor_heuristic = distances[lowest_cost_node_location] + distance(lowest_cost_node_location, neighbor)
-					if not neighbor in open or neighbor_heuristic < distances[neighbor]:
+					if not neighbor in open or neighbor_heuristic < distances[neighbor]: # did we find a better path to this node/neighbor than exists already?
 						if not neighbor in open:
 							open.append(neighbor)
 						distances[neighbor] = neighbor_heuristic
@@ -258,26 +213,13 @@ def astar(init, goal, network):
 	### YOUR CODE GOES ABOVE HERE ###
 	return path, closed
 
-def sort_open(open, heuristics):
-    resorted = []
-    temp = []
-    for item in open:
-        temp.append((item, heuristics[item]))
-
-    temp.sort(key=lambda x: x[1])
-    for item in temp:
-        resorted.append(item[0])
-    return resorted
-
-
-
 
 def myUpdate(nav, delta):
 	### YOUR CODE GOES BELOW HERE ###
 	gates = nav.world.getGates()
 
-	if rayTraceWorld(nav.agent.getLocation(), nav.agent.moveTarget, gates) is not None:
-		nav.setPath([])
+	if rayTraceWorld(nav.agent.getLocation(), nav.agent.moveTarget, gates) is not None: # there is an intersection between this agent's min-path (from A*) and the gates
+		nav.setPath(None)
 		nav.agent.stopMoving()
 	### YOUR CODE GOES ABOVE HERE ###
 	return None
@@ -289,8 +231,8 @@ def myCheckpoint(nav):
 	### YOUR CODE GOES BELOW HERE ###
 	gates = nav.world.getGates()
 
-	if rayTraceWorld(nav.agent.getLocation(), nav.agent.moveTarget, gates) is not None:
-		nav.setPath([])
+	if rayTraceWorld(nav.agent.getLocation(), nav.agent.moveTarget, gates) is not None: # there is an intersection between this agent's min-path (from A*) and the gates
+		nav.setPath(None)
 		nav.agent.stopMoving()
 	### YOUR CODE GOES ABOVE HERE ###
 	return None
@@ -312,17 +254,20 @@ def shortcutPath(source, dest, path, world, agent):
 	start_index = 0
 	end_index = len(path) - 1
 
-	for node_index, node in enumerate(path): # find the optimal starting point
+	# find the optimal starting point
+	for node_index, node in enumerate(path):
 		if clearShot(source, node, world.getLinesWithoutBorders(), world.getPoints(), agent):
 			start_index = node_index
 	path = path[start_index:]
 
-	for node_index, node in reversed(list(enumerate(path))): # find the optimal ending point
+	# find the optimal ending point
+	for node_index, node in reversed(list(enumerate(path))):
 		if clearShot(dest, node, world.getLinesWithoutBorders(), world.getPoints(), agent):
 			end_index = node_index
 	path = path[:(end_index+1)]
 
-	for node_index, node in enumerate(path): # do string pulling on all the nodes in between
+	# do string pulling on all the nodes in between
+	for node_index, node in enumerate(path):
 		skip_to_index = None
 		if (node_index + 2) < (len(path) - 1):
 			for skip_index in range(node_index + 2, len(path)):
@@ -343,6 +288,8 @@ def mySmooth(nav):
 	world = nav.world
 	agent = world.agent
 	destination = nav.getDestination()
+
+	# if we are going toward a destination and there's a clear shot between the agent's location and the final destination, then just move directly there
 	if not destination is None and clearShot(agent.getLocation(), destination, world.getLines(), world.getPoints(), agent):
 		agent.moveToTarget(destination)
 		return True
