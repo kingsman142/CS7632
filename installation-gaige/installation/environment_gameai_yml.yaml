@@ -1,9 +1,0 @@
-name: gameai
-channels:
-- defaults
-dependencies:
-- python=3
-- numpy=1.15
-- pip
-- pip:
-  - pygame==1.9.6

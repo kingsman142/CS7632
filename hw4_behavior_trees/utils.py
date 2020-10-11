@@ -19,6 +19,7 @@
 import sys, pygame, math, numpy, random, time, copy
 from pygame.locals import * 
 from constants import *
+from functools import reduce
 
 
 ########################
@@ -196,16 +197,12 @@ def minimumDistance(line, point):
 #Polygon is a set of points
 def pointOnPolygon(point, polygon):
 	last = None
+	threshold = EPSILON
 	for p in polygon:
-		if last != None:
-			mid = ((last[0]+p[0])/2.0, (last[1]+p[1])/2.0)
-			if withinRange(point, mid, 1.5):
-				return True
+		if last != None and minimumDistance((last, p), point) < threshold:
+			return True
 		last = p
-	mid = ((polygon[0][0]+polygon[len(polygon)-1][0])/2.0, (polygon[0][1]+polygon[len(polygon)-1][1])/2.0)
-	if withinRange(point, mid, 1.5):
-		return True
-	return False
+	return minimumDistance((polygon[0], polygon[len(polygon) - 1]), point) < threshold
 
 def withinRange(p1, p2, range):
 	return distance(p1, p2) <= range
